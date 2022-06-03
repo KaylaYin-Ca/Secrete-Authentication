@@ -3,6 +3,7 @@ const express = require("express");
 const bodyParer = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
+const encrypt = require('mongoose-encryption');
 const app = express();
 
 
@@ -16,10 +17,14 @@ app.use(bodyParer.urlencoded({
 const dbUrl = "mongodb://localhost:27017/userDB"
 mongoose.connect(dbUrl,{useNewUrlParser:true});
 
-const userSchema = {
+const userSchema = new mongoose.Schema({
   email: String,
   password : String
-};
+});
+
+const secret = "Mysecrete:Ineverforget03.Andstillloveher.";
+
+userSchema.plugin(encrypt,{secret:secret,encryptedFields:['password']});
 
 const User = mongoose.model("User",userSchema);
 
@@ -36,14 +41,17 @@ app.post("/login",function(req,res){
   const userName = req.body.username;
   const userPassword = req.body.password;
   User.findOne({
-    email:userName,
-    password:userPassword
+    email:userName
   },function(err,foundUser){
     if (!err) {
       if (!foundUser) {
         res.render("login",{loginResult:"Don't have such account.Please try again! Or registe an account."});
       }else{
-        res.render("secrets",{loginResult:"successful"});
+        if (foundUser.password === userPassword) {
+          res.render("secrets",{loginResult:"successful"});
+        }else {
+          res.render("login",{loginResult:"Password error! Please try again!"});
+        }
       }
     }
   });
@@ -60,7 +68,6 @@ app.post("/register",function(req,res){
 
   User.findOne({
     email:userName,
-    password:userPassword
   },function(err,foundUser){
     if (!err) {
       console.log(foundUser);
