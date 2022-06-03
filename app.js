@@ -6,6 +6,8 @@ const ejs = require("ejs");
 const mongoose = require("mongoose");
 const encrypt = require('mongoose-encryption');
 const md5 = require("md5");
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 const app = express();
 
 // console.log(process.env.API_KEY);
@@ -38,23 +40,27 @@ app.get("/login",function(req,res){
 
 app.post("/login",function(req,res){
   const userName = req.body.username;
-  const userPassword = md5(req.body.password);
-  User.findOne({
-    email:userName
-  },function(err,foundUser){
-    if (!err) {
-      if (!foundUser) {
-        res.render("login",{loginResult:"Don't have such account.Please try again! Or registe an account."});
-      }else{
-        if (foundUser.password === userPassword) {
-          res.render("secrets",{loginResult:"successful"});
-        }else {
-          res.render("login",{loginResult:"Password error! Please try again!"});
+  const userPassword = req.body.password;
+    User.findOne({
+      email:userName
+    },function(err,foundUser){
+      if (!err) {
+        if (!foundUser) {
+          res.render("login",{loginResult:"Don't have such account.Please try again! Or registe an account."});
+        }else{
+          // Load hash from your password DB.
+          bcrypt.compare(userPassword, foundUser.password, function(err, result) {
+              // result == true
+              if (result) {
+                  res.render("secrets",{loginResult:"successful"});
+              }else{
+                res.render("login",{loginResult:"Password error! Please try again!"});
+              }
+          });
+
         }
       }
-    }
-  });
-
+    });
 });
 
 app.get("/register",function(req,res){
@@ -62,34 +68,38 @@ app.get("/register",function(req,res){
 });
 
 app.post("/register",function(req,res){
-  const userName = req.body.username;
-  const userPassword = md5(req.body.password);
 
-  User.findOne({
-    email:userName,
-  },function(err,foundUser){
-    if (!err) {
-      if (!foundUser) {
-        const user = new User({
-          email:userName,
-          password:userPassword
-        });
-        user.save(function(err){
-          if(err){
-            console.log(err);
+  const userName = req.body.username;
+  // create hash code for user password
+  bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+      // Store hash in your password DB.
+      User.findOne({
+        email:userName,
+      },function(err,foundUser){
+        if (!err) {
+          if (!foundUser) {
+            const user = new User({
+              email:userName,
+              password:hash
+            });
+            user.save(function(err){
+              if(err){
+                console.log(err);
+              }else{
+                console.log("Registed Account!");
+                res.render("secrets");
+              }
+            });
           }else{
-            console.log("Registed Account!");
-            res.render("secrets");
-          }
-        });
+            console.log("Already have account!");
+            res.render("register",{registedResult:"Note: Already have the account! Please directly login."});
+        }
       }else{
-        console.log("Already have account!");
-        res.render("register",{registedResult:"Note: Already have the account! Please directly login."});
-    }
-  }else{
-    console.log(err);
-  }
+        console.log(err);
+      }
+      });
   });
+
 });
 
 
