@@ -8,9 +8,8 @@ const mongoose = require("mongoose");
 const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
-
-
-
+const GoogleStrategy = require('passport-google-oauth20');
+const findOrCreate = require('mongoose-findorcreate');
 const app = express();
 
 // console.log(process.env.API_KEY);
@@ -43,6 +42,7 @@ const userSchema = new mongoose.Schema({
 });
 // use this plugin to hash and salt password.
 userSchema.plugin(passportLocalMongoose);
+userSchema.plugin(findOrCreate);
 
 const User = mongoose.model("User", userSchema);
 
@@ -50,8 +50,30 @@ const User = mongoose.model("User", userSchema);
 passport.use(User.createStrategy());
 
 // use static serialize and deserialize of model for passport session support
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+passport.serializeUser(function(user, done) {
+  done(null,user.id);
+});
+
+passport.deserializeUser(function(id,done) {
+  User.findById(id,function(err,user){
+    done(err,id)
+  });
+});
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets",
+    userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    console.log(profile);
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
+
 
 //============Req & Res===============
 app.get("/", function(req, res) {
@@ -63,6 +85,19 @@ app.get("/login", function(req, res) {
     loginResult: ""
   });
 });
+
+app.get("/auth/google",
+  passport.authenticate("google", { scope: ["profile"] })
+);
+
+app.get("/auth/google/secrets",
+  passport.authenticate('google', { failureRedirect: "/login" }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+
+    res.redirect('/secrets');
+  });
+
 
 app.post("/login", function(req, res) {
   const userName = req.body.username;
@@ -81,10 +116,7 @@ app.post("/login", function(req, res) {
         res.redirect('/secrets');
       });
     }
-
   });
-
-
 });
 
 app.get("/register", function(req, res) {
@@ -104,9 +136,7 @@ app.post("/register", function(req, res) {
         res.redirect('/secrets');
       });
     }
-
   });
-
 });
 
 app.get("/secrets",function(req,res){
